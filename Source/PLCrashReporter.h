@@ -86,6 +86,10 @@ typedef struct PLCrashReporterCallbacks {
 - (NSData *) loadPendingCrashReportData;
 - (NSData *) loadPendingCrashReportDataAndReturnError: (NSError **) outError;
 
+- (NSArray*) loadLogFiles;
+- (NSArray *) loadPendingCrashReportDataList;
+- (NSArray *) loadPendingCrashReportDataListAndReturnError: (NSError **) outError;
+
 - (BOOL) purgePendingCrashReport;
 - (BOOL) purgePendingCrashReportAndReturnError: (NSError **) outError;
 

@@ -32,6 +32,7 @@
 #import "CrashReporter/CrashReporter.h"
 
 #import "PLCrashReportTextFormatter.h"
+#import <CommonCrypto/CommonDigest.h>
 
 
 @interface PLCrashReportTextFormatter (PrivateAPI)
@@ -157,8 +158,24 @@ NSInteger binaryImageSort(id binary1, id binary2, void *context);
         if (report.hasMachineInfo && report.machineInfo.modelName != nil)
             hardwareModel = report.machineInfo.modelName;
 
-        [text appendFormat: @"Incident Identifier: [TODO]\n"];
-        [text appendFormat: @"CrashReporter Key:   [TODO]\n"];
+		CFUUIDRef uuidRef = CFUUIDCreate(kCFAllocatorDefault);
+		CFStringRef strRef = CFUUIDCreateString(kCFAllocatorDefault, uuidRef);
+		NSString *uuidString = [NSString stringWithString:(NSString*)strRef];
+		CFRelease(strRef);
+		CFRelease(uuidRef);
+		[text appendFormat: @"Incident Identifier: %@\n", uuidString];
+		
+		NSString *reportSummary = [[[[[report threads] valueForKey:@"stackFrames"] valueForKey:@"instructionPointer"] componentsJoinedByString:@","] description];
+		const char *string = [reportSummary cStringUsingEncoding:NSUTF8StringEncoding];
+		NSData *data = [NSData dataWithBytes:string length:reportSummary.length];
+		uint8_t digest[CC_SHA1_DIGEST_LENGTH];
+        
+		CC_SHA1(data.bytes, data.length, digest);
+        
+		NSMutableString* output = [NSMutableString stringWithCapacity:CC_SHA1_DIGEST_LENGTH * 2];
+		for(int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++)
+			[output appendFormat:@"%02x", digest[i]];
+		[text appendFormat: @"CrashReporter Key: %@\n", output];
         [text appendFormat: @"Hardware Model:      %@\n", hardwareModel];
     }
     
@@ -197,7 +214,7 @@ NSInteger binaryImageSort(id binary1, id binary2, void *context);
         [text appendFormat: @"Path:            %@\n", processPath];
         [text appendFormat: @"Identifier:      %@\n", report.applicationInfo.applicationIdentifier];
         [text appendFormat: @"Version:         %@\n", report.applicationInfo.applicationVersion];
-        [text appendFormat: @"Code Type:       %@\n", codeType];
+        [text appendFormat: @"Code Type:       %@ (Native)\n", codeType];
         [text appendFormat: @"Parent Process:  %@ [%@]\n", parentProcessName, parentProcessId];
     }
     

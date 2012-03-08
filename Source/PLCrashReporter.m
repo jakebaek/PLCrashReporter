@@ -203,7 +203,12 @@ static void uncaught_exception_handler (NSException *exception) {
  */
 - (BOOL) hasPendingCrashReport {
     /* Check for a live crash report file */
-    return [[NSFileManager defaultManager] fileExistsAtPath: [self crashReportPath]];
+    
+    if([self respondsToSelector:@selector(loadLogFiles)])
+        return ([[self loadLogFiles] count] > 0);
+    else 
+        return [[NSFileManager defaultManager] fileExistsAtPath: [self crashReportPath]];
+	
 }
 
 
@@ -240,6 +245,49 @@ static void uncaught_exception_handler (NSException *exception) {
     return [NSData dataWithContentsOfFile: [self crashReportPath] options: NSMappedRead error: outError];
 }
 
+- (NSArray*) loadLogFiles
+{
+	NSString* strLogFilePath = [self crashReportDirectory];
+	NSFileManager* localFileManager = [[NSFileManager alloc] init];
+	NSDirectoryEnumerator* dirEnum = [localFileManager enumeratorAtPath:strLogFilePath];
+	
+	NSMutableArray* arrayFiles = [[[NSMutableArray alloc] initWithCapacity:0] autorelease];
+	
+	NSString* file = [dirEnum nextObject];
+	while (file)
+	{
+		if ([[file pathExtension] isEqualToString:@"plcrash"])
+		{
+            // add logfile to list
+			[arrayFiles addObject:file];
+		}
+		file = [dirEnum nextObject];
+	}
+	[localFileManager release];
+	
+	return arrayFiles;
+}
+
+- (NSArray *) loadPendingCrashReportDataList
+{
+    return [self loadPendingCrashReportDataListAndReturnError: NULL];
+}
+
+- (NSArray *) loadPendingCrashReportDataListAndReturnError: (NSError **) outError
+{
+	NSArray* arrayFiles = [self loadLogFiles];
+	
+	NSMutableArray* arrayDatas = [[[NSMutableArray alloc] initWithCapacity:0] autorelease];
+	
+	for (NSString* filename in arrayFiles)
+	{
+		NSString* filePath = [[self crashReportDirectory] stringByAppendingPathComponent:filename];
+		if ([[NSFileManager defaultManager] fileExistsAtPath:filePath])
+			[arrayDatas addObject:[NSData dataWithContentsOfFile:filePath options:NSMappedRead error:outError]];
+	}
+	
+	return arrayDatas;
+}
 
 /**
  * Purge a pending crash report.
@@ -257,7 +305,21 @@ static void uncaught_exception_handler (NSException *exception) {
  * @return Returns YES on success, or NO on error.
  */
 - (BOOL) purgePendingCrashReportAndReturnError: (NSError **) outError {
-    return [[NSFileManager defaultManager] removeItemAtPath: [self crashReportPath] error: outError];
+    if([self respondsToSelector:@selector(loadLogFiles)])
+    {
+        NSArray* arrayFiles = [self loadLogFiles];
+        
+        for (NSString* filename in arrayFiles)
+        {
+            NSString* filePath = [[self crashReportDirectory] stringByAppendingPathComponent:filename];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath])
+                [[NSFileManager defaultManager] removeItemAtPath: filePath error: outError];
+        }
+        
+        return YES;
+    }
+    else
+        return [[NSFileManager defaultManager] removeItemAtPath: [self crashReportPath] error: outError];
 }
 
 
@@ -474,7 +536,37 @@ static void uncaught_exception_handler (NSException *exception) {
  * Return the path to live crash report (which may not yet, or ever, exist).
  */
 - (NSString *) crashReportPath {
-    return [[self crashReportDirectory] stringByAppendingPathComponent: PLCRASH_LIVE_CRASHREPORT];
+    if([self respondsToSelector:@selector(loadLogFiles)])
+    {
+        // 크래시로그파일명
+        NSDate* today = [NSDate date];
+        
+        NSDateFormatter* df = [[[NSDateFormatter alloc] init] autorelease];
+        [df setTimeStyle:NSDateFormatterFullStyle];
+        // 한국시간 기준으로 구하기 위해서 TimeZone 을 설정한다.
+        [df setTimeZone:[NSTimeZone timeZoneWithAbbreviation:@"KST"]];
+        [df setDateFormat:@"yyyy-MM-dd"];
+        NSString* strToday = [[[NSString alloc] initWithString:[df stringFromDate:today]] autorelease];
+        
+        [df setDateFormat:@"HH:mm:ss:SSS"];
+        NSString* strTime = [[[NSString alloc] initWithString:[df stringFromDate:today]] autorelease];
+        
+        NSString* appVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+        NSString* appName = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleDisplayName"];
+        
+        // 앱이름_앱버전_생성날짜_생성시간_Crash.crash        
+        NSString* filename = [NSString stringWithFormat:@"%@_%@_%@_%@_Crash.plcrash", appName, appVersion, strToday, strTime];
+        NSLog(@"filename = [%@]", filename);
+        
+        /*
+         NSString* filePath = [DOCUMENTSPATH stringByAppendingPathComponent:filename];
+         NSLog(@"로그파일 Path = [%@]", filePath);
+         */
+        
+        return [[self crashReportDirectory] stringByAppendingPathComponent: filename];
+    }
+    else 
+        return [[self crashReportDirectory] stringByAppendingPathComponent: PLCRASH_LIVE_CRASHREPORT];
 }
 
 
